@@ -36,6 +36,8 @@ PageBase* selectedPage;
 
 uint32_t prevSel, currentSel;
 
+int tlsc6x_tp_dect(void); // M5Tough TouchPanel updater
+
 void drawBackground(void)
 {
   prevSel = -1;
@@ -63,6 +65,8 @@ void setup(void)
   //bool LCDEnable, bool SDEnable, bool SerialEnable, bool I2CEnable, mbus_mode_t mode
   //M5.begin(true, true, true, false, kMBusModeOutput);//
   M5.begin();//
+
+  tlsc6x_tp_dect();
 
   M5.Lcd.setFont(&fonts::Font2);
   M5.Lcd.setBaseColor(TFT_WHITE);
