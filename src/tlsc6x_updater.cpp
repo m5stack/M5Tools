@@ -824,45 +824,6 @@ exit:
 /* else -> caller do hw resettting */
 
 
-/* 0:successful */
-static int tlsc6x_download_gestlib_fast(const uint8_t *pcode, uint16_t len)
-{
-  uint8_t dwr, retry;
-  int ret = -2;
-
-  if (tlsc6x_set_dd_mode()) {
-    return -EPERM;
-  }
-
-  dwr = 0x05;
-  if (tlsc6x_bulk_down_check(&dwr, 0x0602, 1) == 0) {  /* stop mcu */
-    dwr = 0x00;
-    tlsc6x_bulk_down_check(&dwr, 0x0643, 1);  /* disable irq */
-  } else {
-    return -EPERM;
-  }
-
-  if (tlsc6x_bulk_down_check(pcode, 0x8000, 1024) == 0) {
-    if (tlsc6x_write_bytes_u16addr(g_tlsc6x_client, 0x8400, pcode + 1024, len - 1024) == 0) {  /*  */
-      ret = 0;
-    }
-  }
-
-  if (ret == 0) {
-    dwr = 0x88;
-    retry = 0;
-    do {
-      ret = tlsc6x_write_bytes_u16addr(g_tlsc6x_client, 0x0602, &dwr, 1);
-    } while ((++retry < 3) && (ret != 0));
-  }
-
-  delay(40);    /* 30ms */
-  if (tlsc6x_get_i2cmode() == DIRECTLY_MODE) {
-    ret = tlsc6x_download_ramcode(pcode, len);
-  }
-
-  return ret;
-}
 
 int tlsc6x_load_ext_binlib(const uint8_t *pdata, uint16_t len)
 {

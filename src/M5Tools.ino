@@ -66,7 +66,10 @@ void setup(void)
   //M5.begin(true, true, true, false, kMBusModeOutput);//
   M5.begin();//
 
-  tlsc6x_tp_dect();
+  if (M5.getBoard() == m5::board_t::board_M5Tough)
+  {
+    tlsc6x_tp_dect();
+  }
 
   M5.Lcd.setFont(&fonts::Font2);
   M5.Lcd.setBaseColor(TFT_WHITE);

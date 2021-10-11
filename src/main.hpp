@@ -80,7 +80,7 @@ static void IRAM_ATTR soundTask(void* sound_param)
     {
       prevSampleRate = p.rate;
       setSpeaker(p.rate);
-      M5.Axp.bitOn(0x94, 0x04); // speaker on
+      M5.Power.Axp192.bitOn(0x94, 0x04); // speaker on
     }
 
     // Write Speaker

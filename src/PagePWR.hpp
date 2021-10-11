@@ -39,17 +39,7 @@ struct PagePWR : public PageBase
   void setExtEn(bool flg)
   {
     exten = flg;
-    if (flg)
-    {
-      M5.Axp.writeRegister8(0x91, (M5.Axp.readRegister8(0x91) & 0x0F) | 0xF0);
-      M5.Axp.writeRegister8(0x90, (M5.Axp.readRegister8(0x90) & 0xF8) | 0x02);
-      M5.Axp.setEXTEN(true);
-    }
-    else
-    {
-      M5.Axp.setEXTEN(false);
-      M5.Axp.writeRegister8(0x90, (M5.Axp.readRegister8(0x90) & 0xF8) | 0x01);
-    }
+    M5.Power.setExtPower(flg);
     M5.Lcd.pushImage(145, 123, 60, 40 , (m5gfx::rgb565_t*)gImage_pwrInOut + flg * 60 * 40);
   }
 
@@ -77,7 +67,7 @@ struct PagePWR : public PageBase
   {
     if (M5.getBoard() != m5::board_t::board_M5StackCore2) { return; }
     drawSlider(level);
-    M5.Axp.setLDO3(1300 + level * 6);
+    M5.Power.Axp192.setLDO3(1300 + level * 6);
   }
 
   void setBrightness(int br)
@@ -119,11 +109,11 @@ struct PagePWR : public PageBase
   {
     M5.Lcd.pushImage(16, 34, 288, 168 , (m5gfx::rgb565_t*)gImage_pwrBk);
 
-    M5.Axp.bitOn(0x82, 0xFF); // ADC enable
+    M5.Power.Axp192.bitOn(0x82, 0xFF); // ADC enable
 
     setBrightness(M5.Lcd.getBrightness());
 
-    setExtEn(M5.Axp.getEXTEN());
+    setExtEn(M5.Power.Axp192.getEXTEN());
 
     batlevel = -1;
 
@@ -190,13 +180,13 @@ struct PagePWR : public PageBase
       }
     }
 
-    float batVolt = M5.Axp.getBatteryVoltage();
+    float batVolt = M5.Power.Axp192.getBatteryVoltage();
 
     int level = std::max<int>(0, std::min<int>(100, (batVolt - 3.2f) * 100));
     if (batlevel != level)
     {
       batlevel = level;
-      if (M5.Axp.getBatState())
+      if (M5.Power.Axp192.getBatState())
       {
         int w = level * 46 / 100;
         M5.Lcd.setClipRect(238, 169, w, 17);
@@ -212,37 +202,37 @@ struct PagePWR : public PageBase
       }
     }
 
-    drawFloat(277, 36, M5.Axp.getInternalTemperature(), 2, 1);
+    drawFloat(277, 36, M5.Power.Axp192.getInternalTemperature(), 2, 1);
 
-    bool dir = M5.Axp.isCharging();
+    bool dir = M5.Power.Axp192.isCharging();
     if (chargeDirection != dir)
     {
       chargeDirection = dir;
       M5.Lcd.pushImage(252, 118, 9, 48 , (m5gfx::rgb565_t*)gImage_batteryDirection + dir * 9 * 48);
     }
     float batCurrent = dir
-                     ? M5.Axp.getBatteryChargeCurrent()
-                     : M5.Axp.getBatteryDischargeCurrent();
+                     ? M5.Power.Axp192.getBatteryChargeCurrent()
+                     : M5.Power.Axp192.getBatteryDischargeCurrent();
     drawFloat(282, 135, batCurrent, 3, 0);
 
     drawFloat(277, 189, batVolt, 1, 2);
 
-    drawFloat(191, 39, M5.Axp.getACINCurrent(), 4, 1);
-    drawFloat(122, 66, M5.Axp.getACINVolatge(), 1, 2);
-    drawFloat(191, 78, M5.Axp.getVBUSCurrent(), 4, 1);
-    drawFloat(122, 112, M5.Axp.getVBUSVoltage(), 1, 2);
-    drawFloat(122, 188, M5.Axp.getAPSVoltage(), 1, 2);
+    drawFloat(191, 39, M5.Power.Axp192.getACINCurrent(), 4, 1);
+    drawFloat(122, 66, M5.Power.Axp192.getACINVolatge(), 1, 2);
+    drawFloat(191, 78, M5.Power.Axp192.getVBUSCurrent(), 4, 1);
+    drawFloat(122, 112, M5.Power.Axp192.getVBUSVoltage(), 1, 2);
+    drawFloat(122, 188, M5.Power.Axp192.getAPSVoltage(), 1, 2);
 /*
     M5.Lcd.setFont(&fonts::Font2);
     M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
 
-    M5.Lcd.setCursor(100,  40); M5.Lcd.printf("bat power: %f", M5.Axp.getBatteryPower());
-    M5.Lcd.setCursor(100,  60); M5.Lcd.printf("bat volt: %f", M5.Axp.getBatteryVoltage());
-    M5.Lcd.setCursor(100,  80); M5.Lcd.printf("vbus current: %f", M5.Axp.getVbusCurrent());
-    M5.Lcd.setCursor(100, 100); M5.Lcd.printf("vbus volt: %f", M5.Axp.getVbusVoltage());
-    M5.Lcd.setCursor(100, 120); M5.Lcd.printf("acin current: %f", M5.Axp.getAcinCurrent());
-    M5.Lcd.setCursor(100, 140); M5.Lcd.printf("acin volt: %f", M5.Axp.getAcinVolatge());
-    M5.Lcd.setCursor(100, 160); M5.Lcd.printf("aps volt: %f", M5.Axp.getApsVoltage());
+    M5.Lcd.setCursor(100,  40); M5.Lcd.printf("bat power: %f", M5.Power.Axp192.getBatteryPower());
+    M5.Lcd.setCursor(100,  60); M5.Lcd.printf("bat volt: %f", M5.Power.Axp192.getBatteryVoltage());
+    M5.Lcd.setCursor(100,  80); M5.Lcd.printf("vbus current: %f", M5.Power.Axp192.getVbusCurrent());
+    M5.Lcd.setCursor(100, 100); M5.Lcd.printf("vbus volt: %f", M5.Power.Axp192.getVbusVoltage());
+    M5.Lcd.setCursor(100, 120); M5.Lcd.printf("acin current: %f", M5.Power.Axp192.getAcinCurrent());
+    M5.Lcd.setCursor(100, 140); M5.Lcd.printf("acin volt: %f", M5.Power.Axp192.getAcinVolatge());
+    M5.Lcd.setCursor(100, 160); M5.Lcd.printf("aps volt: %f", M5.Power.Axp192.getApsVoltage());
 //*/
   }
 };
