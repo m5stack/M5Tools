@@ -8,5 +8,5 @@
  - M5Stack Core2 / Tough
 
 # License
- - [MIT](License.txt)
+ - [MIT](LICENSE)
 
