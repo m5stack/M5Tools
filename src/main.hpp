@@ -1,5 +1,8 @@
 #pragma once
 
+#include <Arduino.h>
+#include <SPI.h>
+#include <SD.h>
 #include <WiFi.h>
 #include <M5Unified.h>
 
@@ -42,7 +45,8 @@ void setSpeaker(int sampleRate = 16000)
     .fixed_mclk           = 0
   };
 
-  ESP_LOGI("main", "i2s_driver_install:%d", i2s_driver_install(Speak_I2S_NUMBER, &i2s_config, 0, nullptr));
+  auto res = i2s_driver_install(Speak_I2S_NUMBER, &i2s_config, 0, nullptr);
+  ESP_LOGI("main", "i2s_driver_install:%d", res);
 
   i2s_pin_config_t tx_pin_config = {
     .bck_io_num     = CONFIG_I2S_BCK_PIN,
@@ -50,9 +54,12 @@ void setSpeaker(int sampleRate = 16000)
     .data_out_num   = CONFIG_I2S_DATA_PIN,
     .data_in_num    = CONFIG_I2S_DATA_IN_PIN,
   };
-  ESP_LOGI("main", "i2s_set_pin:%d", i2s_set_pin(Speak_I2S_NUMBER, &tx_pin_config));
-  ESP_LOGI("main", "i2s_set_clk:%d", i2s_set_clk(Speak_I2S_NUMBER, sampleRate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO));
-  ESP_LOGI("main", "i2s_zero_dma_buffer:%d", i2s_zero_dma_buffer(Speak_I2S_NUMBER));
+  res = i2s_set_pin(Speak_I2S_NUMBER, &tx_pin_config);
+  ESP_LOGI("main", "i2s_set_pin:%d", res);
+  res = i2s_set_clk(Speak_I2S_NUMBER, sampleRate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+  ESP_LOGI("main", "i2s_set_clk:%d", res);
+  res = i2s_zero_dma_buffer(Speak_I2S_NUMBER);
+  ESP_LOGI("main", "i2s_zero_dma_buffer:%d", res);
 }
 
 struct sound_param_t

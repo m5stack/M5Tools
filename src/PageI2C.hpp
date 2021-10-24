@@ -38,11 +38,11 @@ struct PageI2C : public PageBase
     M5.Lcd.fillCircle(180, 166, 4, i2cScanSource == 1 ? TFT_BLACK : TFT_WHITE);
     if (i2cScanSource)
     {
-      M5.In_I2C.begin(i2c_port_t::I2C_NUM_1, 21, 22);
+      M5.In_I2C.begin(I2C_NUM_1, 21, 22);
     }
     else
     {
-      M5.Ex_I2C.begin(i2c_port_t::I2C_NUM_0, 32, 33);
+      M5.Ex_I2C.begin(I2C_NUM_0, 32, 33);
     }
   }
   void loop(void) override
