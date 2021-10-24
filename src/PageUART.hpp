@@ -299,7 +299,6 @@ private:
     }
     void read(uint8_t* buf, size_t len) override
     {
-ESP_LOGE("VER", "ARDUINO_ESP32_RELEASE:%s", ARDUINO_ESP32_RELEASE);
 #if defined ( ARDUINO_ESP32_RELEASE_1_0_4 )
       do
       {
