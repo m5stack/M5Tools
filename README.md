@@ -7,6 +7,6 @@
 # Support device
  - M5Stack Core2 / Tough
 
-#License
+# License
  - [MIT](License.txt)
 
