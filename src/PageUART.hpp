@@ -9,6 +9,9 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#if __has_include(<core_version.h>)
+#include <core_version.h>
+#endif
 
 BluetoothSerial SerialBT;
 
