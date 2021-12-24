@@ -36,7 +36,8 @@ PageBase* selectedPage;
 
 uint32_t prevSel, currentSel;
 
-int tlsc6x_tp_dect(void); // M5Tough TouchPanel updater
+int tlsc6x_tp_dect(void);     // M5Tough TouchPanel updater
+void ft6336_fw_updater(void); // M5Core2 TouchPanel updater
 
 void drawBackground(void)
 {
@@ -69,6 +70,10 @@ void setup(void)
   if (M5.getBoard() == m5::board_t::board_M5Tough)
   {
     tlsc6x_tp_dect();
+  }
+  else if (M5.getBoard() == m5::board_t::board_M5StackCore2)
+  {
+    ft6336_fw_updater();
   }
 
   M5.Lcd.setFont(&fonts::Font2);

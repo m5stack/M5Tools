@@ -6,6 +6,16 @@
 #include <WiFi.h>
 #include <M5Unified.h>
 
+#if __has_include (<esp_idf_version.h>)
+ #include <esp_idf_version.h>
+ #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+  #define M5TOOLS_I2S_COMM_FORMAT I2S_COMM_FORMAT_STAND_I2S
+ #endif
+#endif
+#ifndef M5TOOLS_I2S_COMM_FORMAT
+#define M5TOOLS_I2S_COMM_FORMAT I2S_COMM_FORMAT_I2S
+#endif
+
 extern const unsigned char gWav_Click[];
 extern const unsigned char gWav_Error[];
 
@@ -36,7 +46,7 @@ void setSpeaker(int sampleRate = 16000)
     .sample_rate          = sampleRate,
     .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
     .channel_format       = I2S_CHANNEL_FMT_ALL_RIGHT,
-    .communication_format = I2S_COMM_FORMAT_I2S,
+    .communication_format = M5TOOLS_I2S_COMM_FORMAT,
     .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
     .dma_buf_count        = 2,
     .dma_buf_len          = I2S_DATA_LEN,
