@@ -5,7 +5,7 @@ static constexpr int i2c_addr = 0x38;
 static constexpr int i2c_freq = 400000;
 
 #include "ft6336_fw_v17_app.h"
-#define NEW_FIRMWARE_VERSION 17
+#define OLD_FIRMWARE_VERSION 16
 
 #define FT6336U_ID         0x64
 #define ID_G_CIPHER        0xa3
@@ -215,7 +215,7 @@ void ft6336_fw_updater(void)
     LOG("Firmware version: %d.0.0", fw_ver);
   }
 
-  if (fw_ver < NEW_FIRMWARE_VERSION)
+  if (fw_ver == OLD_FIRMWARE_VERSION)
   {
     auto &bin = firmware_v17;
     LOG("FW length is %ld", sizeof(bin));
