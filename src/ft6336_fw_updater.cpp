@@ -215,7 +215,7 @@ void ft6336_fw_updater(void)
     LOG("Firmware version: %d.0.0", fw_ver);
   }
 
-  if (fw_ver == OLD_FIRMWARE_VERSION)
+  if (fw_ver == 0 || fw_ver == OLD_FIRMWARE_VERSION)
   {
     auto &bin = firmware_v17;
     LOG("FW length is %ld", sizeof(bin));
