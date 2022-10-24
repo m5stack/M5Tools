@@ -10,6 +10,7 @@ static constexpr int i2c_freq = 400000;
 #define FT6336U_ID         0x64
 #define ID_G_CIPHER        0xa3
 #define ID_G_FIRMID        0xa6
+#define ID_G_VENDID        0xa8
 #define FT_REG_RESET_FW    0x07
 #define FT_ERASE_APP_REG   0x61
 #define FT_READ_ID_REG     0x90
@@ -196,26 +197,38 @@ static void ft6x36_fw_upgrade(const uint8_t *data, uint32_t data_len)
 
 void ft6336_fw_updater(void)
 {
-  uint8_t wbuf, rbuf;
+  uint8_t wbuf;
 
   wbuf = ID_G_CIPHER;
-  size_t retry = 32;
+  size_t retry = 8;
+
+  uint8_t cipher = 0;
   do
   {
-    if (i2c_read(&wbuf, 1, &rbuf, 1) && rbuf == FT6336U_ID) { break; }
-    LOG("wait CTPM response");
     delay(128);
+    if (i2c_read(&wbuf, 1, &cipher, 1)) { break; }
+    LOG("wait CTPM response");
   } while (--retry);
+  LOG("ChipVendorID: %02x", cipher);
+
+  /* Get vendor ID */
+  uint8_t vendid = 0;
+  {
+    wbuf = ID_G_VENDID;
+    i2c_read(&wbuf, 1, &vendid, 1);
+    LOG("Vendor ID: %02x", vendid);
+  }
 
   /* Get current firmware version */
   uint8_t fw_ver = 0;
   {
     wbuf = ID_G_FIRMID;
     i2c_read(&wbuf, 1, &fw_ver, 1);
-    LOG("Firmware version: %d.0.0", fw_ver);
+    LOG("Firmware version: %d", fw_ver);
   }
 
-  if (fw_ver == 0 || fw_ver == OLD_FIRMWARE_VERSION)
+  if ((cipher == FT6336U_ID && vendid == 0x11 && fw_ver == OLD_FIRMWARE_VERSION)
+   || (0 == (cipher | vendid | fw_ver))) // For determining recovery in case of firmware corruption;
   {
     auto &bin = firmware_v17;
     LOG("FW length is %ld", sizeof(bin));
