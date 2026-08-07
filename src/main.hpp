@@ -6,6 +6,15 @@
 #include <WiFi.h>
 #include <M5Unified.h>
 
+#if defined(CONFIG_IDF_TARGET_ESP32C5)
+#define M5TOOLS_TARGET_ESP32C5 1
+#else
+#define M5TOOLS_TARGET_ESP32C5 0
+#endif
+
+#define M5TOOLS_LEGACY_I2S_SOUND (!M5TOOLS_TARGET_ESP32C5)
+
+#if M5TOOLS_LEGACY_I2S_SOUND
 #if __has_include (<esp_idf_version.h>)
  #include <esp_idf_version.h>
  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
@@ -14,6 +23,7 @@
 #endif
 #ifndef M5TOOLS_I2S_COMM_FORMAT
 #define M5TOOLS_I2S_COMM_FORMAT I2S_COMM_FORMAT_I2S
+#endif
 #endif
 
 extern const unsigned char gWav_Click[];
@@ -39,6 +49,7 @@ int flickDiffX, flickDiffY;
 
 void setSpeaker(int sampleRate = 16000)
 {
+#if M5TOOLS_LEGACY_I2S_SOUND
   i2s_driver_uninstall(Speak_I2S_NUMBER);
 
   i2s_config_t i2s_config = {
@@ -70,6 +81,9 @@ void setSpeaker(int sampleRate = 16000)
   ESP_LOGI("main", "i2s_set_clk:%d", res);
   res = i2s_zero_dma_buffer(Speak_I2S_NUMBER);
   ESP_LOGI("main", "i2s_zero_dma_buffer:%d", res);
+#else
+  (void)sampleRate;
+#endif
 }
 
 struct sound_param_t
@@ -83,6 +97,7 @@ sound_param_t soundParam;
 
 static void IRAM_ATTR soundTask(void* sound_param)
 {
+#if M5TOOLS_LEGACY_I2S_SOUND
   auto param = (sound_param_t*)sound_param;
   param->rate = 16000;
   int prevSampleRate = 0;
@@ -135,10 +150,15 @@ static void IRAM_ATTR soundTask(void* sound_param)
     }
     ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
   }
+#else
+  (void)sound_param;
+  vTaskDelete(nullptr);
+#endif
 }
 
 void clickSound(void)
 {
+#if M5TOOLS_LEGACY_I2S_SOUND
   // play(gWavClick, 112, 16000);
   //play(wav, 16538, 16000, 16);
   soundParam.data = gWav_Click;
@@ -150,15 +170,18 @@ void clickSound(void)
   // soundParam.rate = 16000;
 
   xTaskNotifyGive(soundParam.handle);
+#endif
 }
 
 void errorSound(void)
 {
+#if M5TOOLS_LEGACY_I2S_SOUND
   soundParam.data = gWav_Error;
   soundParam.len  = 3584;
   soundParam.rate = 16000;
 
   xTaskNotifyGive(soundParam.handle);
+#endif
 }
 
 int updateTouch(void)
@@ -199,4 +222,3 @@ struct PageBase
   virtual void loop(void) {}
   virtual void end(void) {}
 };
-

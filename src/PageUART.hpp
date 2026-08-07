@@ -4,7 +4,10 @@
 
 #include <memory>
 #include <esp_now.h>
+#include <esp_idf_version.h>
+#if !M5TOOLS_TARGET_ESP32C5
 #include <BluetoothSerial.h>
+#endif
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -13,7 +16,11 @@
 #include <core_version.h>
 #endif
 
+#define M5TOOLS_HAS_CLASSIC_BT (!M5TOOLS_TARGET_ESP32C5)
+
+#if M5TOOLS_HAS_CLASSIC_BT
 BluetoothSerial SerialBT;
+#endif
 
 extern const unsigned char gImage_uartBk[];
 extern const unsigned char gImage_uartBps[];
@@ -35,7 +42,11 @@ enum serialSource
 };
 // 0:USB / 1:PortA / 2:PortB / 3:PortC / 4:RS485 / 5:BLE / 6:BT / 7:ESPNOW
 static constexpr int serialSourceMax = 8;
+#if M5TOOLS_TARGET_ESP32C5
+static constexpr int8_t sourceUARTList[serialSourceMax][2] = { { 11, 12 }, { 0, 1 }, { 24, 23 }, {-1, -1}, {-1, -1}, {-1, -1}, {-1, -1}, {-1, -1} }; // tx,rx
+#else
 static constexpr int8_t sourceUARTList[serialSourceMax][2] = { { 1, 3 }, { 32, 33 }, { 26, 36 }, { 14, 13 }, { 19, 27 }, {-1, -1}, {-1, -1} }; // tx,rx
+#endif
 
 class ringbuf_t
 {
@@ -168,7 +179,7 @@ struct PageUART : public PageBase
   {
     static constexpr char format[] = "%02x%02x%02x%02x%02x%02x";
     uint8_t mac[6];
-    esp_read_mac(mac, ESP_MAC_BT);
+    WiFi.macAddress(mac);
     _canvas_source.setPsram(true);
     _canvas_source.createSprite(sourceWidth, sourceHeight * serialSourceMax);
     _canvas_source.pushImage(0, 0, sourceWidth, sourceHeight * serialSourceMax, (m5gfx::swap565_t*)gImage_uartPort);
@@ -179,7 +190,7 @@ struct PageUART : public PageBase
     _canvas_source.setCursor(24, sourceHeight * ss_bt + 2);
     _canvas_source.printf(format, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     _canvas_source.setCursor(24, sourceHeight * ss_espnow + 2);
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    WiFi.macAddress(mac);
     _canvas_source.printf(format, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     M5.Lcd.pushImage(17, 34, 286, 168 , (m5gfx::rgb565_t*)gImage_uartBk);
@@ -290,7 +301,10 @@ private:
     HwSerial(HardwareSerial* seri, int baudrate, int rx, int tx)
      : _seri { seri }
     {
-      seri->begin(baudrate, SERIAL_8N1, rx, tx);
+      if (rx >= 0 && tx >= 0)
+      {
+        seri->begin(baudrate, SERIAL_8N1, rx, tx);
+      }
     }
     void release(void) override
     {
@@ -319,6 +333,13 @@ private:
     HardwareSerial* _seri;
   };
 
+  struct NullSerial : public ISerial
+  {
+    int available(void) override { return 0; }
+    void read(uint8_t*, size_t) override {}
+    void write(const uint8_t*, size_t) override {}
+  };
+
   struct ESPNOWSerial : public ISerial
   {
     esp_now_peer_info_t slave;
@@ -328,13 +349,25 @@ private:
       _ringbuf_espnow.write(data, len);
     }
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    static void OnDataRecvV5(const esp_now_recv_info_t *info, const uint8_t *data, int len)
+    {
+      (void)info;
+      OnDataRecv(nullptr, data, len);
+    }
+#endif
+
     ESPNOWSerial(void)
     {
       _ringbuf_espnow.init(512);
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
       if (esp_now_init() == ESP_OK) { ESP_LOGI("main", "ESPNow Init Success"); }
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+      esp_now_register_recv_cb(OnDataRecvV5);
+#else
       esp_now_register_recv_cb(OnDataRecv);
+#endif
 
       memset(&slave, 0, sizeof(slave));
       memset(slave.peer_addr, 0xFF, 6);
@@ -372,25 +405,43 @@ private:
   {
     BTSerial()
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       SerialBT.begin();
+#endif
     }
     void release(void) override
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       SerialBT.disconnect();
       SerialBT.end();
+#endif
     }
     int available(void) override
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       return SerialBT.available();
+#else
+      return 0;
+#endif
     }
     void read(uint8_t* buf, size_t len) override
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       SerialBT.readBytes(buf, len);
+#else
+      (void)buf;
+      (void)len;
+#endif
     }
     void write(const uint8_t* buf, size_t len) override
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       SerialBT.write(buf, len);
       SerialBT.flush();
+#else
+      (void)buf;
+      (void)len;
+#endif
     }
   };
 
@@ -416,11 +467,11 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string rxValue = pCharacteristic->getValue();
-      size_t len = rxValue.size();
+      auto rxValue = pCharacteristic->getValue();
+      size_t len = rxValue.length();
       if (len)
       {
-        _ringbuf_ble.write((uint8_t*)rxValue.c_str(), len);
+        _ringbuf_ble.write((const uint8_t*)rxValue.c_str(), len);
       }
     }
 };
@@ -611,7 +662,14 @@ class MyCallbacks: public BLECharacteristicCallbacks {
           _seri1.reset(new BLESerial());
           break;
         default:
-          _seri1.reset(new HwSerial(&Serial1, bpsUARTList[bpsUART1], sourceUARTList[sourceUART1][1], sourceUARTList[sourceUART1][0]));
+          if (sourceUARTList[sourceUART1][0] >= 0 && sourceUARTList[sourceUART1][1] >= 0)
+          {
+            _seri1.reset(new HwSerial(&Serial1, bpsUARTList[bpsUART1], sourceUARTList[sourceUART1][1], sourceUARTList[sourceUART1][0]));
+          }
+          else
+          {
+            _seri1.reset(new NullSerial());
+          }
           break;
         }
 
@@ -627,7 +685,14 @@ class MyCallbacks: public BLECharacteristicCallbacks {
           _seri2.reset(new BLESerial());
           break;
         default:
-          _seri2.reset(new HwSerial(&Serial2, bpsUARTList[bpsUART2], sourceUARTList[sourceUART2][1], sourceUARTList[sourceUART2][0]));
+          if (sourceUARTList[sourceUART2][0] >= 0 && sourceUARTList[sourceUART2][1] >= 0)
+          {
+            _seri2.reset(new HwSerial(&Serial2, bpsUARTList[bpsUART2], sourceUARTList[sourceUART2][1], sourceUARTList[sourceUART2][0]));
+          }
+          else
+          {
+            _seri2.reset(new NullSerial());
+          }
           break;
         }
       // _seri_in->begin(bpsUARTList[bps], SERIAL_8N1, sourceUARTList[source][1], sourceUARTList[source][0]);

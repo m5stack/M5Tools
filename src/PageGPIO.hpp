@@ -14,13 +14,19 @@ struct PageGPIO : public PageBase
     M5.Lcd.pushImage(17, 32, 286, 172, (m5gfx::rgb565_t*)gImage_gpioPage);
     M5.Lcd.pushImage(36, 56, 8, 136, (m5gfx::rgb565_t*)gImage_slideBack1);
     M5.Lcd.pushImage(76, 56, 8, 136, (m5gfx::rgb565_t*)gImage_slideBack1);
+#if !M5TOOLS_TARGET_ESP32C5
     pinMode(35, ANALOG);
     pinMode(36, ANALOG);
+#endif
     setGpio(0, _gpioOut[0]);
     setGpio(1, _gpioOut[1]);
     for (int i = 0; i < 2; ++i)
     {
+#if M5TOOLS_TARGET_ESP32C5
+      prev[i] = 128;
+#else
       prev[i] = 128 - (analogRead(35 + i) >> 5);
+#endif
     }
   }
   void loop(void) override
@@ -51,6 +57,10 @@ struct PageGPIO : public PageBase
         }
       }
     }
+
+#if M5TOOLS_TARGET_ESP32C5
+    return;
+#endif
 
     M5.Lcd.copyRect(118, 53, 173, 130, 119, 53);
     uint16_t buf[130];
@@ -128,7 +138,9 @@ private:
     M5.Lcd.drawFastHLine(x+1, 183 - (value >> 1), 30, TFT_WHITE);
     M5.Lcd.drawRect(x, 179 - (value >> 1), 32, 9, TFT_DARKGRAY);
   //*/
+#if !M5TOOLS_TARGET_ESP32C5
     dacWrite(index ? 26 : 25, value);
+#endif
   }
 
 };

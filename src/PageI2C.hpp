@@ -26,11 +26,19 @@ struct PageI2C : public PageBase
     M5.Lcd.setFont(&fonts::Font2);
     M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
     M5.Lcd.drawString(" External"   ,  64, 144);
+#if M5TOOLS_TARGET_ESP32C5
+    M5.Lcd.drawString("I2C0"        ,  64, 160);
+    M5.Lcd.drawString("G0 / G1"     ,  64, 176);
+    M5.Lcd.drawString(" Internal"   , 192, 144);
+    M5.Lcd.drawString("I2C0"        , 192, 160);
+    M5.Lcd.drawString("G2 / G3"     , 192, 176);
+#else
     M5.Lcd.drawString("I2C0(Wire)" ,  64, 160);
     M5.Lcd.drawString("G33 / G32"   ,  64, 176);
     M5.Lcd.drawString(" Internal"   , 192, 144);
     M5.Lcd.drawString("I2C1(Wire1)", 192, 160);
     M5.Lcd.drawString("G22 / G21"   , 192, 176);
+#endif
 
     M5.Lcd.drawCircle(52,166,6,TFT_BLACK);
     M5.Lcd.drawCircle(180,166,6,TFT_BLACK);
@@ -38,11 +46,19 @@ struct PageI2C : public PageBase
     M5.Lcd.fillCircle(180, 166, 4, i2cScanSource == 1 ? TFT_BLACK : TFT_WHITE);
     if (i2cScanSource)
     {
+#if M5TOOLS_TARGET_ESP32C5
+      M5.In_I2C.begin(I2C_NUM_0, 2, 3);
+#else
       M5.In_I2C.begin(I2C_NUM_1, 21, 22);
+#endif
     }
     else
     {
+#if M5TOOLS_TARGET_ESP32C5
+      M5.Ex_I2C.begin(I2C_NUM_0, 0, 1);
+#else
       M5.Ex_I2C.begin(I2C_NUM_0, 32, 33);
+#endif
     }
   }
   void loop(void) override

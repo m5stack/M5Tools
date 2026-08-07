@@ -39,7 +39,11 @@ struct PagePWR : public PageBase
   void setExtEn(bool flg)
   {
     exten = flg;
+#if M5TOOLS_TARGET_ESP32C5
+    M5.Power.setExtOutput(flg);
+#else
     M5.Power.setExtPower(flg);
+#endif
     M5.Lcd.pushImage(145, 123, 60, 40 , (m5gfx::rgb565_t*)gImage_pwrInOut + flg * 60 * 40);
   }
 
@@ -107,6 +111,11 @@ struct PagePWR : public PageBase
 
   void setup(void) override
   {
+#if M5TOOLS_TARGET_ESP32C5
+    setupC5();
+    return;
+#endif
+
     M5.Lcd.pushImage(16, 34, 288, 168 , (m5gfx::rgb565_t*)gImage_pwrBk);
 
     M5.Power.Axp192.bitOn(0x82, 0xFF); // ADC enable
@@ -126,11 +135,19 @@ struct PagePWR : public PageBase
 
   void end(void) override
   {
+#if M5TOOLS_TARGET_ESP32C5
+    return;
+#endif
     setMotor(0);
   }
 
   void loop(void) override
   {
+#if M5TOOLS_TARGET_ESP32C5
+    loopC5();
+    return;
+#endif
+
     if (justTouch)
     {
       if (tp[0].x >= 145 && tp[0].x < 205 && tp[0].y >= 123 && tp[0].y < 163)
@@ -234,5 +251,58 @@ struct PagePWR : public PageBase
     M5.Lcd.setCursor(100, 140); M5.Lcd.printf("acin volt: %f", M5.Power.Axp192.getAcinVolatge());
     M5.Lcd.setCursor(100, 160); M5.Lcd.printf("aps volt: %f", M5.Power.Axp192.getApsVoltage());
 //*/
+  }
+
+private:
+  void setupC5(void)
+  {
+    M5.Lcd.fillRect(17, 32, 286, 172, TFT_WHITE);
+    M5.Lcd.setFont(&fonts::Font2);
+    M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
+    M5.Lcd.drawString("ToughC5 Power", 24, 40);
+    M5.Lcd.drawString("EXT", 24, 72);
+    M5.Lcd.drawString("Battery", 24, 100);
+    M5.Lcd.drawString("Current", 24, 128);
+    M5.Lcd.drawString("VBUS", 24, 156);
+    M5.Lcd.drawString("Tap EXT to toggle", 24, 184);
+    batlevel = -1;
+    chargeDirection = -1;
+    setExtEn(M5.Power.getExtOutput());
+    loopC5();
+  }
+
+  void loopC5(void)
+  {
+    if (justTouch && tp[0].x >= 145 && tp[0].x < 205 && tp[0].y >= 123 && tp[0].y < 163)
+    {
+      clickSound();
+      setExtEn(!exten);
+    }
+
+    const int batMv = M5.Power.getBatteryVoltage();
+    const int batCurrent = M5.Power.getBatteryCurrent();
+    const int vbusMv = M5.Power.getVBUSVoltage();
+    const int level = M5.Power.getBatteryLevel();
+    const auto charging = M5.Power.isCharging();
+
+    M5.Lcd.setFont(&fonts::Font2);
+    M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
+    M5.Lcd.fillRect(100, 70, 190, 118, TFT_WHITE);
+    M5.Lcd.setCursor(100, 72);
+    M5.Lcd.printf("%s", exten ? "ON " : "OFF");
+    M5.Lcd.setCursor(100, 100);
+    if (batMv >= 0) { M5.Lcd.printf("%d.%03d V", batMv / 1000, batMv % 1000); }
+    else { M5.Lcd.print("N/A"); }
+    M5.Lcd.setCursor(100, 128);
+    M5.Lcd.printf("%d mA", batCurrent);
+    M5.Lcd.setCursor(100, 156);
+    if (vbusMv >= 0) { M5.Lcd.printf("%d.%03d V", vbusMv / 1000, vbusMv % 1000); }
+    else { M5.Lcd.print("N/A"); }
+    M5.Lcd.setCursor(200, 100);
+    if (level >= 0) { M5.Lcd.printf("%d%%", level); }
+    else { M5.Lcd.print("--%"); }
+    M5.Lcd.setCursor(200, 128);
+    M5.Lcd.printf("%s", charging == m5::Power_Class::is_charging ? "CHG" :
+                         charging == m5::Power_Class::is_discharging ? "DSG" : "UNK");
   }
 };

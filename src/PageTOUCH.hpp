@@ -3,6 +3,7 @@
 #include "main.hpp"
 
 #include <esp_now.h>
+#include <esp_idf_version.h>
 
 static constexpr uint32_t dummy_prefix = 0xABEC1DEB;
 static constexpr int packetlen = 4 + sizeof(m5gfx::touch_point_t);
@@ -46,12 +47,23 @@ struct PageTOUCH : public PageBase
   //  ESP_LOGI("recv", "%x:%x:%x:%x:%x:%x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   }
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+  static void OnDataRecvV5(const esp_now_recv_info_t *info, const uint8_t *data, int data_len)
+  {
+    OnDataRecv(info->src_addr, data, data_len);
+  }
+#endif
+
   void startEspNow(void)
   {
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     if (esp_now_init() == ESP_OK) { ESP_LOGI("main", "ESPNow Init Success"); }
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    esp_now_register_recv_cb(OnDataRecvV5);
+#else
     esp_now_register_recv_cb(OnDataRecv);
+#endif
 
     memset(&slave, 0, sizeof(slave));
     memset(slave.peer_addr, 0xFF, 6);
