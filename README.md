@@ -20,8 +20,8 @@ The `m5tools_tough_c5` environment uses the pioarduino ESP32-C5 platform and
 the `develop` branches of M5Unified and M5GFX. It uses a no-OTA 3MB application
 partition because the firmware does not fit in the default 4MB board app slot.
 
-On ESP32-C5, classic Bluetooth, DAC GPIO output, and legacy I2S click sounds are
-not available and are disabled.
+On ESP32-C5, classic Bluetooth and DAC GPIO output are not available and are
+disabled. Click and error sounds are played through `M5.Speaker`.
 
 # Support device
  - M5Stack Core2 / Tough

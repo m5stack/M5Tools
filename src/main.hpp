@@ -12,20 +12,6 @@
 #define M5TOOLS_TARGET_ESP32C5 0
 #endif
 
-#define M5TOOLS_LEGACY_I2S_SOUND (!M5TOOLS_TARGET_ESP32C5)
-
-#if M5TOOLS_LEGACY_I2S_SOUND
-#if __has_include (<esp_idf_version.h>)
- #include <esp_idf_version.h>
- #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
-  #define M5TOOLS_I2S_COMM_FORMAT I2S_COMM_FORMAT_STAND_I2S
- #endif
-#endif
-#ifndef M5TOOLS_I2S_COMM_FORMAT
-#define M5TOOLS_I2S_COMM_FORMAT I2S_COMM_FORMAT_I2S
-#endif
-#endif
-
 extern const unsigned char gWav_Click[];
 extern const unsigned char gWav_Error[];
 
@@ -37,151 +23,33 @@ bool justTouch;
 int flickDiffX, flickDiffY;
 
 
-#define CONFIG_I2S_BCK_PIN 12
-#define CONFIG_I2S_LRCK_PIN 0
-#define CONFIG_I2S_DATA_PIN 2
-#define CONFIG_I2S_DATA_IN_PIN 34
-
-#define Speak_I2S_NUMBER I2S_NUM_0
-#define MODE_MIC 0
-#define MODE_SPK 1
-#define I2S_DATA_LEN 60
-
-void setSpeaker(int sampleRate = 16000)
+static bool beginSpeaker(void)
 {
-#if M5TOOLS_LEGACY_I2S_SOUND
-  i2s_driver_uninstall(Speak_I2S_NUMBER);
-
-  i2s_config_t i2s_config = {
-    .mode                 = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
-    .sample_rate          = sampleRate,
-    .bits_per_sample      = I2S_BITS_PER_SAMPLE_16BIT,
-    .channel_format       = I2S_CHANNEL_FMT_ALL_RIGHT,
-    .communication_format = M5TOOLS_I2S_COMM_FORMAT,
-    .intr_alloc_flags     = ESP_INTR_FLAG_LEVEL1,
-    .dma_buf_count        = 2,
-    .dma_buf_len          = I2S_DATA_LEN,
-    .use_apll             = false,
-    .tx_desc_auto_clear   = true,
-    .fixed_mclk           = 0
-  };
-
-  auto res = i2s_driver_install(Speak_I2S_NUMBER, &i2s_config, 0, nullptr);
-  ESP_LOGI("main", "i2s_driver_install:%d", res);
-
-  i2s_pin_config_t tx_pin_config = {
-    .bck_io_num     = CONFIG_I2S_BCK_PIN,
-    .ws_io_num      = CONFIG_I2S_LRCK_PIN,
-    .data_out_num   = CONFIG_I2S_DATA_PIN,
-    .data_in_num    = CONFIG_I2S_DATA_IN_PIN,
-  };
-  res = i2s_set_pin(Speak_I2S_NUMBER, &tx_pin_config);
-  ESP_LOGI("main", "i2s_set_pin:%d", res);
-  res = i2s_set_clk(Speak_I2S_NUMBER, sampleRate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
-  ESP_LOGI("main", "i2s_set_clk:%d", res);
-  res = i2s_zero_dma_buffer(Speak_I2S_NUMBER);
-  ESP_LOGI("main", "i2s_zero_dma_buffer:%d", res);
-#else
-  (void)sampleRate;
-#endif
+  if (!M5.Speaker.isEnabled())
+  {
+    return false;
+  }
+  return M5.Speaker.isRunning() || M5.Speaker.begin();
 }
 
-struct sound_param_t
+static void playSound(const uint8_t* data, size_t len, uint32_t sampleRate)
 {
-  xTaskHandle handle = nullptr;
-  const uint8_t* data = nullptr;
-  size_t len = 0;
-  size_t rate = 0;
-};
-sound_param_t soundParam;
-
-static void IRAM_ATTR soundTask(void* sound_param)
-{
-#if M5TOOLS_LEGACY_I2S_SOUND
-  auto param = (sound_param_t*)sound_param;
-  param->rate = 16000;
-  int prevSampleRate = 0;
-  // I2S
-  int16_t data[I2S_DATA_LEN];
-  for (;;)
+  if (beginSpeaker())
   {
-    sound_param_t p = *param;
-//    play(param->data, param->len, param->rate);
-
-    if (prevSampleRate != p.rate)
-    {
-      prevSampleRate = p.rate;
-      setSpeaker(p.rate);
-      M5.Power.Axp192.bitOn(0x94, 0x04); // speaker on
-    }
-
-    // Write Speaker
-    size_t bytes_written = 0;
-
-    int index = 0;
-
-  //  i2s_zero_dma_buffer(Speak_I2S_NUMBER);
-    memset(data, 0, I2S_DATA_LEN << 1);
-    for (int i = 0; i < 2; ++i)
-    {
-      i2s_write(Speak_I2S_NUMBER, data, I2S_DATA_LEN*2, &bytes_written, portMAX_DELAY);
-    }
-    for (int i = 0; i < p.len; i++)
-    {
-      int16_t val = p.data[i];
-      data[index] = (val - 128) * 64;
-      index += 1;
-      if (I2S_DATA_LEN <= index)
-      {
-        index = 0;
-        i2s_write(Speak_I2S_NUMBER, data, I2S_DATA_LEN*2, &bytes_written, portMAX_DELAY);
-      }
-    }
-    memset(&data[index], 0, (I2S_DATA_LEN - index) * 2);
-    i2s_write(Speak_I2S_NUMBER, data, I2S_DATA_LEN * 2, &bytes_written, portMAX_DELAY);
-    if (index <= I2S_DATA_LEN)
-    {
-      memset(data, 0, index * 2);
-    }
-
-    for (int i = 0; i < 4; ++i)
-    {
-      i2s_write(Speak_I2S_NUMBER, data, I2S_DATA_LEN*2, &bytes_written, portMAX_DELAY);
-    }
-    ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
+    M5.Speaker.playRaw(data, len, sampleRate, false, 1, 0, true);
   }
-#else
-  (void)sound_param;
-  vTaskDelete(nullptr);
-#endif
 }
 
 void clickSound(void)
 {
-#if M5TOOLS_LEGACY_I2S_SOUND
   // play(gWavClick, 112, 16000);
   //play(wav, 16538, 16000, 16);
-  soundParam.data = gWav_Click;
-  soundParam.len  = 112;
-  soundParam.rate = 16000;
-
-  // soundParam.data = himehinaWav;
-  // soundParam.len  = 63667;
-  // soundParam.rate = 16000;
-
-  xTaskNotifyGive(soundParam.handle);
-#endif
+  playSound(gWav_Click, 112, 16000);
 }
 
 void errorSound(void)
 {
-#if M5TOOLS_LEGACY_I2S_SOUND
-  soundParam.data = gWav_Error;
-  soundParam.len  = 3584;
-  soundParam.rate = 16000;
-
-  xTaskNotifyGive(soundParam.handle);
-#endif
+  playSound(gWav_Error, 3584, 16000);
 }
 
 int updateTouch(void)

@@ -2,9 +2,6 @@
 #include "main.hpp"
 
 #include <esp_log.h>
-#if M5TOOLS_LEGACY_I2S_SOUND
-#include <driver/i2s.h>
-#endif
 
 #include "PageDefault.hpp"
 #include "PageWiFi.hpp"
@@ -81,10 +78,6 @@ void setup(void)
   M5.Lcd.setFont(&fonts::Font2);
   M5.Lcd.setBaseColor(TFT_WHITE);
   M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
-
-#if M5TOOLS_LEGACY_I2S_SOUND
-  xTaskCreatePinnedToCore(soundTask, "soundTask", 4096, &soundParam, 0, &soundParam.handle, 0);
-#endif
 
   M5.Lcd.startWrite();
 
