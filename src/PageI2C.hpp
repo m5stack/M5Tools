@@ -42,8 +42,54 @@ struct PageI2C : public PageBase
     M5.Lcd.drawCircle(180,166,6,TFT_BLACK);
     M5.Lcd.fillCircle( 52, 166, 4, i2cScanSource == 0 ? TFT_BLACK : TFT_WHITE);
     M5.Lcd.fillCircle(180, 166, 4, i2cScanSource == 1 ? TFT_BLACK : TFT_WHITE);
+    /// 再初期化はページ表示時とソース切替時のみ。毎ループ行うとドライバ再構築の
+    /// オーバーヘッドでループ周期が伸び、タッチ応答が悪化する。
     beginSelectedI2C();
 #endif
+    /// 全セルを未スキャン表示で初期化し、スキャン結果は loop で 1 アドレスずつ反映する
+    M5.Lcd.setFont(&fonts::Font0);
+    for (int i = 0x08; i < 0x78; ++i)
+    {
+      drawCell(i, cell_unknown);
+    }
+    M5.Lcd.setFont(&fonts::Font2);
+    M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
+    scanAddr = 0x08;
+  }
+
+  /// 空 write プローブ (SMBus Quick 相当) はファーム実装スレーブ (UnitLCD/OLED 等)
+  /// や動作中のタッチコントローラの状態を乱すため、1 バイト read で在否を判定する
+  bool probe(int addr)
+  {
+#if M5TOOLS_TARGET_ESP32C5
+    auto wire = &M5.In_I2C;
+#else
+    auto wire = i2cScanSource ? &M5.In_I2C : &M5.Ex_I2C;
+#endif
+    std::uint8_t dummy;
+    bool ok = wire->start(addr, true, 100000);
+    if (ok)
+    {
+      ok = wire->read(&dummy, 1, true);
+      ok = wire->stop() && ok;
+    }
+    return ok;
+  }
+
+  enum cell_state_t { cell_unknown, cell_absent, cell_found };
+
+  void drawCell(int addr, cell_state_t state)
+  {
+    std::size_t y = addr >> 4;
+    std::size_t x = addr & 15;
+    M5.Lcd.setCursor(28 + x * 17, 43 + y * 12);
+    switch (state)
+    {
+    case cell_unknown: M5.Lcd.setTextColor(TFT_DARKGRAY , TFT_LIGHTGRAY); break;
+    case cell_absent:  M5.Lcd.setTextColor(TFT_LIGHTGRAY, TFT_WHITE    ); break;
+    case cell_found:   M5.Lcd.setTextColor(TFT_BLACK    , TFT_GREEN    ); break;
+    }
+    M5.Lcd.printf("%02x", addr);
   }
 
 #if !M5TOOLS_TARGET_ESP32C5
@@ -75,24 +121,11 @@ struct PageI2C : public PageBase
 #endif
     {
       M5.Lcd.setFont(&fonts::Font0);
-      bool result[0x80];
-#if M5TOOLS_TARGET_ESP32C5
-      auto scanWire = &M5.In_I2C;
-#else
-      /// 単一コントローラを内外で切り替える機種のみ毎回の再初期化が必要
-      beginSelectedI2C();
-      auto scanWire = i2cScanSource ? &M5.In_I2C : &M5.Ex_I2C;
-#endif
-      scanWire->scanID(result);
-      for (int i = 0x08; i < 0x78; ++i)
-      {
-        bool hit = result[i];
-        std::size_t y = i >> 4;
-        std::size_t x = i & 15;
-        M5.Lcd.setCursor(28 + x * 17, 43 + y * 12);
-        M5.Lcd.setTextColor(hit ? TFT_BLACK : TFT_LIGHTGRAY , hit ? TFT_GREEN : TFT_WHITE);
-        M5.Lcd.printf("%02x", i);
-      }
+      /// 一括スキャンはループ周期が伸びてタッチ応答が悪化するため、
+      /// 1 ループ 1 アドレスずつ処理する
+      int addr = scanAddr;
+      drawCell(addr, probe(addr) ? cell_found : cell_absent);
+      scanAddr = (addr + 1 < 0x78) ? addr + 1 : 0x08;
       M5.Lcd.setFont(&fonts::Font2);
       M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
     }
@@ -100,8 +133,9 @@ struct PageI2C : public PageBase
   void end(void) override
   {
   }
-#if !M5TOOLS_TARGET_ESP32C5
 private:
+  int scanAddr = 0x08;
+#if !M5TOOLS_TARGET_ESP32C5
   int i2cScanSource = 0;
 #endif
 
