@@ -25,44 +25,43 @@ struct PageI2C : public PageBase
 
     M5.Lcd.setFont(&fonts::Font2);
     M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
-    M5.Lcd.drawString(" External"   ,  64, 144);
 #if M5TOOLS_TARGET_ESP32C5
-    M5.Lcd.drawString("I2C0"        ,  64, 160);
-    M5.Lcd.drawString("G0 / G1"     ,  64, 176);
-    M5.Lcd.drawString(" Internal"   , 192, 144);
-    M5.Lcd.drawString("I2C0"        , 192, 160);
-    M5.Lcd.drawString("G2 / G3"     , 192, 176);
+    /// ToughC5 の PortA は内部バス (LP_I2C, G2/G3) のレベルシフタ分配であり、
+    /// 独立した外部バスが存在しないため、スキャン元の選択 UI は表示しない。
+    M5.Lcd.drawCenterString("LP_I2C  G2 / G3" , 160, 148);
+    M5.Lcd.drawCenterString("Internal / PortA", 160, 168);
 #else
+    M5.Lcd.drawString(" External"   ,  64, 144);
     M5.Lcd.drawString("I2C0(Wire)" ,  64, 160);
     M5.Lcd.drawString("G33 / G32"   ,  64, 176);
     M5.Lcd.drawString(" Internal"   , 192, 144);
     M5.Lcd.drawString("I2C1(Wire1)", 192, 160);
     M5.Lcd.drawString("G22 / G21"   , 192, 176);
-#endif
 
     M5.Lcd.drawCircle(52,166,6,TFT_BLACK);
     M5.Lcd.drawCircle(180,166,6,TFT_BLACK);
     M5.Lcd.fillCircle( 52, 166, 4, i2cScanSource == 0 ? TFT_BLACK : TFT_WHITE);
     M5.Lcd.fillCircle(180, 166, 4, i2cScanSource == 1 ? TFT_BLACK : TFT_WHITE);
+    beginSelectedI2C();
+#endif
+  }
+
+#if !M5TOOLS_TARGET_ESP32C5
+  void beginSelectedI2C(void)
+  {
     if (i2cScanSource)
     {
-#if M5TOOLS_TARGET_ESP32C5
-      M5.In_I2C.begin(I2C_NUM_0, 2, 3);
-#else
       M5.In_I2C.begin(I2C_NUM_1, 21, 22);
-#endif
     }
     else
     {
-#if M5TOOLS_TARGET_ESP32C5
-      M5.Ex_I2C.begin(I2C_NUM_0, 0, 1);
-#else
       M5.Ex_I2C.begin(I2C_NUM_0, 32, 33);
-#endif
     }
   }
+#endif
   void loop(void) override
   {
+#if !M5TOOLS_TARGET_ESP32C5
     if (justTouch && (tp[0].x > 50 && tp[0].x < 280 && tp[0].y > 144 && tp[0].y < 184))
     {
       int tmp = tp[0].x < 160 ? 0 : 1;
@@ -73,10 +72,17 @@ struct PageI2C : public PageBase
         setup();
       }
     }
+#endif
     {
       M5.Lcd.setFont(&fonts::Font0);
       bool result[0x80];
+#if M5TOOLS_TARGET_ESP32C5
+      auto scanWire = &M5.In_I2C;
+#else
+      /// 単一コントローラを内外で切り替える機種のみ毎回の再初期化が必要
+      beginSelectedI2C();
       auto scanWire = i2cScanSource ? &M5.In_I2C : &M5.Ex_I2C;
+#endif
       scanWire->scanID(result);
       for (int i = 0x08; i < 0x78; ++i)
       {
@@ -94,7 +100,9 @@ struct PageI2C : public PageBase
   void end(void) override
   {
   }
+#if !M5TOOLS_TARGET_ESP32C5
 private:
   int i2cScanSource = 0;
+#endif
 
 };

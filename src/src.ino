@@ -64,7 +64,20 @@ void setup(void)
 {
   //bool LCDEnable, bool SDEnable, bool SerialEnable, bool I2CEnable, mbus_mode_t mode
   //M5.begin(true, true, true, false, kMBusModeOutput);//
+#if M5TOOLS_TARGET_ESP32C5
+  Serial.begin(115200);
+  delay(200);
+  ESP_LOGI("main", "setup start");
+  auto cfg = M5.config();
+  cfg.external_display_value = 0;
+  cfg.internal_imu = false;
+  cfg.internal_mic = false;
+  cfg.internal_spk = false;
+  M5.begin(cfg);
+  ESP_LOGI("main", "M5.begin done board=%d", M5.getBoard());
+#else
   M5.begin();//
+#endif
 
   if (M5.getBoard() == m5::board_t::board_M5Tough)
   {
@@ -78,10 +91,12 @@ void setup(void)
   M5.Lcd.setFont(&fonts::Font2);
   M5.Lcd.setBaseColor(TFT_WHITE);
   M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
+  ESP_LOGI("main", "lcd config done");
 
   M5.Lcd.startWrite();
 
   drawBackground();
+  ESP_LOGI("main", "drawBackground done");
 }
 
 void loop(void)
@@ -214,15 +229,19 @@ Serial.print("done");
         else if (slide_x == 200)
         {
 #if M5TOOLS_TARGET_ESP32C5
-          esp_sleep_enable_ext1_wakeup(1ULL << 4, ESP_EXT1_WAKEUP_ANY_LOW); // gpio4 == wake
+          /// wakeup ピン (PM1 の IRQ 出力) の解放待ちを含む M5Unified 側の
+          /// 手順に任せる (タッチ・電源ボタン・RTC アラームのいずれでも復帰可能)
+          delay(100);
+          M5.Lcd.fillScreen(TFT_BLACK);
+          M5.Power.deepSleep(m5::Power_Class::sleep_no_timer, true);
 #else
           esp_sleep_enable_ext0_wakeup(GPIO_NUM_39, 0); // gpio39 == touch INT
-#endif
           delay(100);
           M5.Lcd.fillScreen(TFT_BLACK);
           M5.Lcd.sleep();
           M5.Lcd.waitDisplay();
           esp_deep_sleep_start();
+#endif
         }
         else
         {
