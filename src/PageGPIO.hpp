@@ -147,6 +147,8 @@ struct PageGPIO : public PageBase
       ledcDetach(gpioPwmPins[i]);
     }
     pinMode(4, INPUT_PULLUP);
+    M5.Power.M5pm1.setGPIOMode(m5::M5PM1_Class::gpio1, m5::M5PM1_Class::output);
+    M5.Power.M5pm1.setGPIOOutput(m5::M5PM1_Class::gpio1, true);
     M5.Power.M5pm1.setGPIOFunction(m5::M5PM1_Class::gpio1, m5::M5PM1_Class::irq);
     if (_adc)
     {

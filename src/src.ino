@@ -228,6 +228,10 @@ Serial.print("done");
         }
         else if (slide_x == 200)
         {
+          /// スリープスライダーはページ切替を経由しない導線のため、ページが
+          /// 占有しているハードウェア (GPIO ページの G4/PM1 等) をここで解放する
+          selectedPage->end();
+          selectedPage = &pageDefault;
 #if M5TOOLS_TARGET_ESP32C5
           /// wakeup ピン (PM1 の IRQ 出力) の解放待ちを含む M5Unified 側の
           /// 手順に任せる (タッチ・電源ボタン・RTC アラームのいずれでも復帰可能)
