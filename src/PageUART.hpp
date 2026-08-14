@@ -603,7 +603,7 @@ class MyCallbacks: public BLECharacteristicCallbacks {
       do
       {
         size_t sendlen = std::min<size_t>(20u, len);
-        pTxCharacteristic->setValue((uint8_t*)buf, len);
+        pTxCharacteristic->setValue((uint8_t*)buf, sendlen);
         pTxCharacteristic->notify();
         buf += sendlen;
         len -= sendlen;
