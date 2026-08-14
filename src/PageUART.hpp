@@ -163,6 +163,7 @@ struct PageUART : public PageBase
   static constexpr int sourceX = 104;
   static constexpr int sourceWidth = 98;
   static constexpr int sourceHeight = 18;
+  static constexpr int sourceImgWidth = 34; // 画像素材はラベル部のみ (ピン番号等は実描画)
   static constexpr int colorLogBk = 0xE73C;
 
   M5Canvas _canvas_source;
@@ -215,16 +216,30 @@ struct PageUART : public PageBase
     WiFi.macAddress(mac);
     _canvas_source.setPsram(true);
     _canvas_source.createSprite(sourceWidth, sourceHeight * sourceCount);
-    _canvas_source.setTextSize(1,2);
+    _canvas_source.fillSprite(TFT_WHITE);
     _canvas_source.setTextColor(TFT_BLACK, TFT_WHITE);
     for (int i = 0; i < sourceCount; ++i)
-    { /// 画像素材から有効なソースの行だけを抜き出して並べる
+    { /// 画像素材 (ラベル部のみ) から有効なソースの行だけを抜き出して並べる
       int id = sourceIdList[i];
-      _canvas_source.pushImage(0, i * sourceHeight, sourceWidth, sourceHeight, (m5gfx::swap565_t*)gImage_uartPort + id * sourceWidth * sourceHeight);
+      _canvas_source.pushImage(0, i * sourceHeight, sourceImgWidth, sourceHeight, (m5gfx::swap565_t*)gImage_uartPort + id * sourceImgWidth * sourceHeight);
       if (id == ss_ble || id == ss_bt || id == ss_espnow)
       {
+        _canvas_source.setFont(&fonts::Font0);
+        _canvas_source.setTextSize(1,2);
         _canvas_source.setCursor(24, sourceHeight * i + 2);
         _canvas_source.printf(format, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+      }
+      else
+      { /// 実際に使うピン番号を描く
+        int8_t tx, rx;
+        getSourcePins(id, tx, rx);
+        if (rx >= 0 && tx >= 0)
+        {
+          _canvas_source.setFont(&fonts::Font2);
+          _canvas_source.setTextSize(1);
+          _canvas_source.setCursor(36, i * sourceHeight + 1);
+          _canvas_source.printf("R%d/T%d", rx, tx);
+        }
       }
     }
 
