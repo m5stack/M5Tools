@@ -2,8 +2,6 @@
 
 #include "main.hpp"
 
-#define CONFIG_TF_SS_PIN 4
-
 struct PageTF : public PageBase
 {
   void setup(void) override
@@ -37,10 +35,8 @@ struct PageTF : public PageBase
       delay(100);                     // TF 電源の安定待ち
       M5.Lcd.printf("TF_DET=%d TF_EN=%d\r\n",
                     (int)ioe.digitalRead(13), (int)ioe.digitalRead(5));
-      const int tf_ss_pin = M5.getPin(m5::pin_name_t::sd_spi_ss);
-#else
-      const int tf_ss_pin = CONFIG_TF_SS_PIN;
 #endif
+      const int tf_ss_pin = M5.getPin(m5::pin_name_t::sd_spi_ss);
       int retry = 5;
       do
       {
