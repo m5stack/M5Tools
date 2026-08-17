@@ -52,8 +52,11 @@ struct PageRTC : public PageBase
   {
     if (_editIdx < 0 || _editIdx >= 6)
     {
-      _date = M5.Rtc.getDate();
-      _time = M5.Rtc.getTime();
+      // bool 版 getter は失敗時に out-param を更新しないので、読み失敗や
+      // 不正データの際は前回の正常値が保持される。1 回の呼び出しに纏めるのは
+      // date だけ成功・time だけ失敗という新旧混在を避けるため。
+      // (戻り値版は失敗を無視して負のセンチネル値を返すため使わない)
+      M5.Rtc.getDateTime(&_date, &_time);
     }
     if (justTouch)
     {
@@ -197,15 +200,19 @@ private:
 
   m5::rtc_time_t _wake_timer;
 
-  void drawNumber(LovyanGFX* gfx, const m5gfx::rgb565_t* img, int x, int y, size_t val, int int_digit)
+  void drawNumber(LovyanGFX* gfx, const m5gfx::rgb565_t* img, int x, int y, int val, int int_digit)
   {
+    // 初回読み取り前の初期値など、負値は空白 (グリフ10) で埋める。
+    // 旧実装は size_t 受けだったため負値が大きな符号なし値になり、
+    // フィールド外まで余分な桁を描いて残留していた。
+    const bool blank = (val < 0);
     do
     { // 低い桁から順に描画
       x -= 12;
-      size_t num = (val % 10);
+      int num = blank ? 10 : (val % 10);
       gfx->pushImage(x, y, 12, 20, img + 12 * 20 * num);
-      val = val / 10;
-    } while (--int_digit > 0 || val);
+      val = blank ? 0 : val / 10;
+    } while (--int_digit > 0 || val > 0);
   }
 
   bool flickValue(void)
