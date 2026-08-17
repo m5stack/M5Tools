@@ -4,7 +4,10 @@
 
 #include <memory>
 #include <esp_now.h>
+#include <esp_idf_version.h>
+#if !M5TOOLS_TARGET_ESP32C5
 #include <BluetoothSerial.h>
+#endif
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -13,7 +16,11 @@
 #include <core_version.h>
 #endif
 
+#define M5TOOLS_HAS_CLASSIC_BT (!M5TOOLS_TARGET_ESP32C5)
+
+#if M5TOOLS_HAS_CLASSIC_BT
 BluetoothSerial SerialBT;
+#endif
 
 extern const unsigned char gImage_uartBk[];
 extern const unsigned char gImage_uartBps[];
@@ -34,8 +41,45 @@ enum serialSource
 , ss_espnow
 };
 // 0:USB / 1:PortA / 2:PortB / 3:PortC / 4:RS485 / 5:BLE / 6:BT / 7:ESPNOW
-static constexpr int serialSourceMax = 8;
-static constexpr int8_t sourceUARTList[serialSourceMax][2] = { { 1, 3 }, { 32, 33 }, { 26, 36 }, { 14, 13 }, { 19, 27 }, {-1, -1}, {-1, -1} }; // tx,rx
+
+// ボードで使えるソースのみを列挙する (表示順 = この並び順)。
+// ToughC5 では PortA が内部 I2C バスと共用のため UART 用途から除外し、
+// Classic BT 非搭載のため BT も除外する。USB は HWCDC 経由で扱う。
+#if M5TOOLS_TARGET_ESP32C5
+static constexpr int8_t sourceIdList[] = { ss_usb, ss_portb, ss_portc, ss_rs485, ss_ble, ss_espnow };
+#else
+static constexpr int8_t sourceIdList[] = { ss_usb, ss_porta, ss_portb, ss_portc, ss_rs485, ss_ble, ss_bt, ss_espnow };
+#endif
+static constexpr int sourceCount = sizeof(sourceIdList);
+
+// UART ピンの取得。ポート類は M5Unified のピンテーブルから引く (tx=pin2 / rx=pin1)。
+// RS485 と旧機種の USB (UART0 ブリッジ) はピンテーブルに項目が無いため直値。
+static void getSourcePins(int src, int8_t& tx, int8_t& rx)
+{
+  tx = -1; rx = -1;
+  switch (src)
+  {
+#if M5TOOLS_TARGET_ESP32C5
+  case ss_rs485: tx = 24; rx = 23; return;
+#else
+  case ss_usb:   tx =  1; rx =  3; return;
+  case ss_rs485: tx = 19; rx = 27; return;
+  case ss_porta: tx = M5.getPin(m5::pin_name_t::port_a_pin2); rx = M5.getPin(m5::pin_name_t::port_a_pin1); return;
+#endif
+  case ss_portb: tx = M5.getPin(m5::pin_name_t::port_b_pin2); rx = M5.getPin(m5::pin_name_t::port_b_pin1); return;
+  case ss_portc: tx = M5.getPin(m5::pin_name_t::port_c_txd ); rx = M5.getPin(m5::pin_name_t::port_c_rxd ); return;
+  default: return;
+  }
+}
+
+// ボーレート設定が意味を持つソースか (HWCDC 経由の USB はボーレート不要)
+static bool sourceUsesBaud(int src)
+{
+#if M5TOOLS_TARGET_ESP32C5
+  if (src == ss_usb) { return false; }
+#endif
+  return src < ss_ble;
+}
 
 class ringbuf_t
 {
@@ -119,6 +163,7 @@ struct PageUART : public PageBase
   static constexpr int sourceX = 104;
   static constexpr int sourceWidth = 98;
   static constexpr int sourceHeight = 18;
+  static constexpr int sourceImgWidth = 34; // 画像素材はラベル部のみ (ピン番号等は実描画)
   static constexpr int colorLogBk = 0xE73C;
 
   M5Canvas _canvas_source;
@@ -152,8 +197,8 @@ struct PageUART : public PageBase
 
   void drawBps(void)
   {
-    drawBps( 98, bpsUART1, sourceUART1 < ss_ble, visibleBps1);
-    drawBps(120, bpsUART2, sourceUART2 < ss_ble, visibleBps2);
+    drawBps( 98, bpsUART1, sourceUsesBaud(sourceIdList[sourceUART1]), visibleBps1);
+    drawBps(120, bpsUART2, sourceUsesBaud(sourceIdList[sourceUART2]), visibleBps2);
 
     // if (sourceUART2 >= ss_ble)
     // {
@@ -168,19 +213,35 @@ struct PageUART : public PageBase
   {
     static constexpr char format[] = "%02x%02x%02x%02x%02x%02x";
     uint8_t mac[6];
-    esp_read_mac(mac, ESP_MAC_BT);
+    WiFi.macAddress(mac);
     _canvas_source.setPsram(true);
-    _canvas_source.createSprite(sourceWidth, sourceHeight * serialSourceMax);
-    _canvas_source.pushImage(0, 0, sourceWidth, sourceHeight * serialSourceMax, (m5gfx::swap565_t*)gImage_uartPort);
-    _canvas_source.setTextSize(1,2);
+    _canvas_source.createSprite(sourceWidth, sourceHeight * sourceCount);
+    _canvas_source.fillSprite(TFT_WHITE);
     _canvas_source.setTextColor(TFT_BLACK, TFT_WHITE);
-    _canvas_source.setCursor(24, sourceHeight * ss_ble + 2);
-    _canvas_source.printf(format, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    _canvas_source.setCursor(24, sourceHeight * ss_bt + 2);
-    _canvas_source.printf(format, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    _canvas_source.setCursor(24, sourceHeight * ss_espnow + 2);
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    _canvas_source.printf(format, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    for (int i = 0; i < sourceCount; ++i)
+    { /// 画像素材 (ラベル部のみ) から有効なソースの行だけを抜き出して並べる
+      int id = sourceIdList[i];
+      _canvas_source.pushImage(0, i * sourceHeight, sourceImgWidth, sourceHeight, (m5gfx::swap565_t*)gImage_uartPort + id * sourceImgWidth * sourceHeight);
+      if (id == ss_ble || id == ss_bt || id == ss_espnow)
+      {
+        _canvas_source.setFont(&fonts::Font0);
+        _canvas_source.setTextSize(1,2);
+        _canvas_source.setCursor(24, sourceHeight * i + 2);
+        _canvas_source.printf(format, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+      }
+      else
+      { /// 実際に使うピン番号を描く
+        int8_t tx, rx;
+        getSourcePins(id, tx, rx);
+        if (rx >= 0 && tx >= 0)
+        {
+          _canvas_source.setFont(&fonts::Font2);
+          _canvas_source.setTextSize(1);
+          _canvas_source.setCursor(36, i * sourceHeight + 1);
+          _canvas_source.printf("R%d/T%d", rx, tx);
+        }
+      }
+    }
 
     M5.Lcd.pushImage(17, 34, 286, 168 , (m5gfx::rgb565_t*)gImage_uartBk);
     M5.Lcd.pushImage(sourceX,  98, sourceWidth, sourceHeight, (m5gfx::rgb565_t*)_canvas_source.getBuffer() + (sourceUART1 * sourceWidth * sourceHeight));
@@ -247,11 +308,11 @@ struct PageUART : public PageBase
           {
             if (tp[0].y < 118)
             {
-              flickSelect((m5gfx::rgb565_t*)_canvas_source.getBuffer(), sourceUART1, sourceX, 98, sourceWidth, sourceHeight, serialSourceMax, sourceUART2);
+              flickSelect((m5gfx::rgb565_t*)_canvas_source.getBuffer(), sourceUART1, sourceX, 98, sourceWidth, sourceHeight, sourceCount, sourceUART2);
             }
             else
             {
-              flickSelect((m5gfx::rgb565_t*)_canvas_source.getBuffer(), sourceUART2, sourceX, 120, sourceWidth, sourceHeight, serialSourceMax, sourceUART1);
+              flickSelect((m5gfx::rgb565_t*)_canvas_source.getBuffer(), sourceUART2, sourceX, 120, sourceWidth, sourceHeight, sourceCount, sourceUART1);
             }
             drawBps();
           }
@@ -290,7 +351,10 @@ private:
     HwSerial(HardwareSerial* seri, int baudrate, int rx, int tx)
      : _seri { seri }
     {
-      seri->begin(baudrate, SERIAL_8N1, rx, tx);
+      if (rx >= 0 && tx >= 0)
+      {
+        seri->begin(baudrate, SERIAL_8N1, rx, tx);
+      }
     }
     void release(void) override
     {
@@ -319,6 +383,32 @@ private:
     HardwareSerial* _seri;
   };
 
+  struct NullSerial : public ISerial
+  {
+    int available(void) override { return 0; }
+    void read(uint8_t*, size_t) override {}
+    void write(const uint8_t*, size_t) override {}
+  };
+
+#if M5TOOLS_TARGET_ESP32C5
+  /// USB は USB-Serial-JTAG (HWCDC) でありピン指定の UART が存在しない
+  struct UsbCdcSerial : public ISerial
+  {
+    int available(void) override
+    {
+      return Serial.available();
+    }
+    void read(uint8_t* buf, size_t len) override
+    {
+      Serial.readBytes(buf, len);
+    }
+    void write(const uint8_t* buf, size_t len) override
+    {
+      Serial.write(buf, len);
+    }
+  };
+#endif
+
   struct ESPNOWSerial : public ISerial
   {
     esp_now_peer_info_t slave;
@@ -328,13 +418,25 @@ private:
       _ringbuf_espnow.write(data, len);
     }
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    static void OnDataRecvV5(const esp_now_recv_info_t *info, const uint8_t *data, int len)
+    {
+      (void)info;
+      OnDataRecv(nullptr, data, len);
+    }
+#endif
+
     ESPNOWSerial(void)
     {
       _ringbuf_espnow.init(512);
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
       if (esp_now_init() == ESP_OK) { ESP_LOGI("main", "ESPNow Init Success"); }
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+      esp_now_register_recv_cb(OnDataRecvV5);
+#else
       esp_now_register_recv_cb(OnDataRecv);
+#endif
 
       memset(&slave, 0, sizeof(slave));
       memset(slave.peer_addr, 0xFF, 6);
@@ -372,25 +474,43 @@ private:
   {
     BTSerial()
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       SerialBT.begin();
+#endif
     }
     void release(void) override
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       SerialBT.disconnect();
       SerialBT.end();
+#endif
     }
     int available(void) override
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       return SerialBT.available();
+#else
+      return 0;
+#endif
     }
     void read(uint8_t* buf, size_t len) override
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       SerialBT.readBytes(buf, len);
+#else
+      (void)buf;
+      (void)len;
+#endif
     }
     void write(const uint8_t* buf, size_t len) override
     {
+#if M5TOOLS_HAS_CLASSIC_BT
       SerialBT.write(buf, len);
       SerialBT.flush();
+#else
+      (void)buf;
+      (void)len;
+#endif
     }
   };
 
@@ -416,11 +536,11 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string rxValue = pCharacteristic->getValue();
-      size_t len = rxValue.size();
+      auto rxValue = pCharacteristic->getValue();
+      size_t len = rxValue.length();
       if (len)
       {
-        _ringbuf_ble.write((uint8_t*)rxValue.c_str(), len);
+        _ringbuf_ble.write((const uint8_t*)rxValue.c_str(), len);
       }
     }
 };
@@ -498,7 +618,7 @@ class MyCallbacks: public BLECharacteristicCallbacks {
       do
       {
         size_t sendlen = std::min<size_t>(20u, len);
-        pTxCharacteristic->setValue((uint8_t*)buf, len);
+        pTxCharacteristic->setValue((uint8_t*)buf, sendlen);
         pTxCharacteristic->notify();
         buf += sendlen;
         len -= sendlen;
@@ -578,14 +698,44 @@ class MyCallbacks: public BLECharacteristicCallbacks {
     M5Canvas _canvas;
   };
 
+  ISerial* createSerial(int id, HardwareSerial* hws, int baudrate)
+  {
+    switch (id)
+    {
+    case ss_espnow: return new ESPNOWSerial();
+    case ss_ble:    return new BLESerial();
+#if M5TOOLS_HAS_CLASSIC_BT
+    case ss_bt:     return new BTSerial();
+#endif
+#if M5TOOLS_TARGET_ESP32C5
+    case ss_usb:    return new UsbCdcSerial();
+#endif
+    default:
+      {
+        int8_t tx, rx;
+        getSourcePins(id, tx, rx);
+        if (tx >= 0 && rx >= 0)
+        {
+#if !M5TOOLS_TARGET_ESP32C5
+          /// USB はコンソールが保持している UART0 をそのまま使う
+          /// (core 3.x では別 UART へ TX ピンを付け替えても奪取できない)
+          if (id == ss_usb) { hws = &Serial0; }
+#endif
+          return new HwSerial(hws, baudrate, rx, tx);
+        }
+        return new NullSerial();
+      }
+    }
+  }
+
   serial_monitor_t serialMon1;
   serial_monitor_t serialMon2;
   std::unique_ptr<ISerial> _seri1;
   std::unique_ptr<ISerial> _seri2;
   int bpsUART1 = 7; // 115200
   int bpsUART2 = 7; // 115200
-  int sourceUART1 = serialSource::ss_usb;
-  int sourceUART2 = serialSource::ss_porta;
+  int sourceUART1 = 0; // sourceIdList の表示 index
+  int sourceUART2 = 1;
   bool visibleBps1 = true;
   bool visibleBps2 = true;
   bool enableUART = false;
@@ -599,38 +749,15 @@ class MyCallbacks: public BLECharacteristicCallbacks {
       enableUART = enable;
       if (enable)
       {
-        switch (sourceUART1)
-        {
-        case ss_espnow:
-          _seri1.reset(new ESPNOWSerial());
-          break;
-        case ss_bt:
-          _seri1.reset(new BTSerial());
-          break;
-        case ss_ble:
-          _seri1.reset(new BLESerial());
-          break;
-        default:
-          _seri1.reset(new HwSerial(&Serial1, bpsUARTList[bpsUART1], sourceUARTList[sourceUART1][1], sourceUARTList[sourceUART1][0]));
-          break;
-        }
-
-        switch (sourceUART2)
-        {
-        case ss_espnow:
-          _seri2.reset(new ESPNOWSerial());
-          break;
-        case ss_bt:
-          _seri2.reset(new BTSerial());
-          break;
-        case ss_ble:
-          _seri2.reset(new BLESerial());
-          break;
-        default:
-          _seri2.reset(new HwSerial(&Serial2, bpsUARTList[bpsUART2], sourceUARTList[sourceUART2][1], sourceUARTList[sourceUART2][0]));
-          break;
-        }
-      // _seri_in->begin(bpsUARTList[bps], SERIAL_8N1, sourceUARTList[source][1], sourceUARTList[source][0]);
+        /// C5 は HP UART が 2 本 (Serial2 は LP UART でピン固定のため使えない)。
+        /// コンソールは USB-JTAG なので UART0 (Serial0) が空いている。
+#if M5TOOLS_TARGET_ESP32C5
+        auto& hws2 = Serial0;
+#else
+        auto& hws2 = Serial2;
+#endif
+        _seri1.reset(createSerial(sourceIdList[sourceUART1], &Serial1, bpsUARTList[bpsUART1]));
+        _seri2.reset(createSerial(sourceIdList[sourceUART2], &hws2  , bpsUARTList[bpsUART2]));
 
         serialMon1.setBridge(_seri1.get(), _seri2.get());
         serialMon2.setBridge(_seri2.get(), _seri1.get());
