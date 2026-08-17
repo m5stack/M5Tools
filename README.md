@@ -21,7 +21,9 @@ the `develop` branches of M5Unified and M5GFX. It uses a no-OTA 3MB application
 partition because the firmware does not fit in the default 4MB board app slot.
 
 On ESP32-C5, classic Bluetooth and DAC GPIO output are not available and are
-disabled. Click and error sounds are played through `M5.Speaker`.
+disabled. The board has no I2S speaker either, so the click and error sounds
+are single tones from the PM1 PWM buzzer instead of the WAV assets that the
+other boards play through `M5.Speaker`.
 
 # Support device
  - M5Stack Core2 / Tough

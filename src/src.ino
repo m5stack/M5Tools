@@ -150,6 +150,10 @@ Serial.print("done");
         selectedPage->end();
         selectedPage = pageList[currentSel];
         M5.Lcd.fillRect(17, 32, 286, 172, TFT_WHITE);
+#if M5TOOLS_TARGET_ESP32C5
+        // 描画の長いページに入るとブザーの停止が遅れるので、先に鳴らし切っておく。
+        buzzerFlush();
+#endif
         selectedPage->setup();
         return;
       }
