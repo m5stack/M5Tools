@@ -95,11 +95,16 @@ struct PagePWR : public PageBase
     }
     int val = value;
 
+    // 数字画像に負号のグリフが無いため負値は表示できない。加えて C++ では負数の
+    // 剰余が負になり、そのまま画像配列の添字にすると範囲外を読んで表示が壊れる。
+    // 値を出せない場合は空白で埋める。
+    const bool blank = (val < 0);
+
     // 低い桁から順に描画
     do
     {
       int num = (val % 10);
-      if (!val && fraction_digit < 0)
+      if (blank || (!val && fraction_digit < 0))
       {
         num = 10;
       }
@@ -110,7 +115,7 @@ struct PagePWR : public PageBase
         M5.Lcd.pushImage(x, y, 8, 12, (m5gfx::rgb565_t*)gImage_pwrNumber + 8 * 12 * (11));
         x -= 8;
       }
-      val = val / 10;
+      val = blank ? 0 : val / 10;
     } while (--int_digit > 0 || val);
   }
 
