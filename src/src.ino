@@ -201,6 +201,10 @@ Serial.print("done");
         if (prev_x != slide_x)
         {
           prev_x = slide_x;
+          /// The write transaction stays held, so pushSprite() returns with DMA
+          /// still reading this canvas. Wait just before overwriting it so the
+          /// transfer overlaps with input handling. (waitDisplay() is a no-op on LCD)
+          M5.Lcd.waitDMA();
           _canvas_base.pushImage(-32, -80, 320, 240, (m5gfx::rgb565_t*)gImage_sleepBk);
           _canvas_bk.pushSprite(&_canvas_base, 0, 0);
           _canvas_base.fillRect(28, 0, slide_x, 56, 0x555555u);

@@ -131,6 +131,10 @@ struct PageRTC : public PageBase
     if (_prev_x != _slide_x || _editIdx >= 6)
     {
       _prev_x = _slide_x;
+      /// The write transaction stays held, so pushSprite() returns with DMA
+      /// still reading this canvas. Wait just before overwriting it so the
+      /// transfer overlaps with input handling. (waitDisplay() is a no-op on LCD)
+      M5.Lcd.waitDMA();
       _canvas_base.pushImage(-13, -124, 288, 168, (m5gfx::rgb565_t*)gImage_rtcBk);
       auto img = (const m5gfx::rgb565_t*)gImage_rtcNumberGray;
       drawNumber(&_canvas_base, img, 106, 11, _wake_timer.hours, 2);
