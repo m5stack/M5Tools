@@ -37,12 +37,24 @@ struct PageTF : public PageBase
                     (int)ioe.digitalRead(13), (int)ioe.digitalRead(5));
 #endif
       const int tf_ss_pin = M5.getPin(m5::pin_name_t::sd_spi_ss);
-      int retry = 5;
-      do
+      constexpr int retry_max = 5;
+      bool opened = false;
+      bool canceled = false;
+      for (int attempt = 1; ; ++attempt)
       {
         SD.end();
-      } while (!SD.begin(tf_ss_pin, SPI, 25000000) && --retry);
-      if (retry)
+        opened = SD.begin(tf_ss_pin, SPI, 25000000);
+        if (opened || attempt >= retry_max) { break; }
+        /// 何度目の試行かを見せる。試行の合間はタッチで中断できる
+        M5.Lcd.printf("retry %d/%d ...\r\n", attempt + 1, retry_max);
+        updateTouch();
+        if (prev_touchPoints < touchPoints)
+        {
+          canceled = true;
+          break;
+        }
+      }
+      if (opened)
       {
         auto root = SD.open("/");
         if (!showFiles(root))
@@ -53,7 +65,7 @@ struct PageTF : public PageBase
       }
       else
       {
-        M5.Lcd.println("TF card open failure .");
+        M5.Lcd.println(canceled ? "TF card open canceled ." : "TF card open failure .");
       }
       M5.Lcd.clearScrollRect();
       M5.Lcd.setTextScroll(false);
