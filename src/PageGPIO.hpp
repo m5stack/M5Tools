@@ -17,7 +17,7 @@ extern const unsigned char gImage_slideRed[];
 /// 出力は従来機種の M5BUS DAC 位置に合わせて G6 / G4 を使う。
 /// G4 は PM1 の IRQ 出力線 (wakeup ピン) と共有のため、ページ滞在中のみ
 /// PM1 側を入力 (Hi-Z) にして線を明け渡してもらい、離脱時に復元する。
-static constexpr uint8_t gpioPwmPins[2] = { 6, 4 };  // M5BUS DAC 位置 (G6 = PortB out)
+static constexpr uint8_t gpioOutPins[2] = { 6, 4 };  // M5BUS DAC 位置 (G6 = PortB out)
 static constexpr uint8_t gpioAdcPins[2] = { 5, 1 };  // ループバック先: G6->G5 / G4->G1
 static constexpr uint8_t gpioAdcChs[2] = { ADC1_GPIO5_CHANNEL, ADC1_GPIO1_CHANNEL };
 /// PWM 周波数の制約: SAR ADC の T/H は速い矩形波に追従できず、PWM 周期が
@@ -29,6 +29,12 @@ static constexpr uint8_t gpioPwmBits = 7;   // 128 段階 (XTAL 48MHz で余裕)
 /// ADC は連続変換 (DMA) モードで回す。80kHz を 2ch で分け合い各 40kHz。
 /// 1 フレームで数百サンプル平均になるため PWM 矩形波の揺らぎが均される。
 static constexpr uint32_t gpioAdcFreq = 80000;
+static constexpr const char gpioOutLabel[] = "PWM";
+#else
+/// 従来機種は DAC 出力を ADC 入力へループバックする
+static constexpr uint8_t gpioOutPins[2] = { 25, 26 };
+static constexpr uint8_t gpioAdcPins[2] = { 35, 36 };
+static constexpr const char gpioOutLabel[] = "DAC";
 #endif
 
 struct PageGPIO : public PageBase
@@ -38,23 +44,41 @@ struct PageGPIO : public PageBase
     M5.Lcd.pushImage(17, 32, 286, 172, (m5gfx::rgb565_t*)gImage_gpioPage);
     M5.Lcd.pushImage(36, 56, 8, 136, (m5gfx::rgb565_t*)gImage_slideBack1);
     M5.Lcd.pushImage(76, 56, 8, 136, (m5gfx::rgb565_t*)gImage_slideBack1);
+
+    /// ピン番号は機種ごとに異なるため背景画像に含めず、実ピン定数から描画する
+    M5.Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
+    M5.Lcd.setTextDatum(textdatum_t::middle_center);
+    M5.Lcd.drawString(gpioOutLabel, 59, 40, &fonts::Font2);
+    char label[4];
+    for (int i = 0; i < 2; ++i)
+    { // 出力スライダーの下
+      snprintf(label, sizeof label, "G%d", gpioOutPins[i]);
+      M5.Lcd.drawString(label, 40 + i * 40, 198, &fonts::Font2);
+    }
+    M5.Lcd.setTextDatum(textdatum_t::middle_right);
+    for (int i = 0; i < 2; ++i)
+    { // グラフ凡例ラインの左
+      snprintf(label, sizeof label, "G%d", gpioAdcPins[i]);
+      M5.Lcd.drawString(label, 180 + i * 77, 198, &fonts::Font2);
+    }
+    M5.Lcd.setTextDatum(textdatum_t::top_left);
 #if M5TOOLS_TARGET_ESP32C5
     /// G4 を PWM に使う間、PM1 の IRQ 出力を入力 (Hi-Z) にして線を明け渡してもらう
     M5.Power.M5pm1.setGPIOFunction(m5::M5PM1_Class::gpio1, m5::M5PM1_Class::gpio);
     M5.Power.M5pm1.setGPIOMode(m5::M5PM1_Class::gpio1, m5::M5PM1_Class::input);
     for (int i = 0; i < 2; ++i)
     {
-      if (!ledcAttach(gpioPwmPins[i], gpioPwmFreq, gpioPwmBits))
+      if (!ledcAttach(gpioOutPins[i], gpioPwmFreq, gpioPwmBits))
       {
         M5.Lcd.setCursor(24, 40);
-        M5.Lcd.printf("PWM G%d attach NG", gpioPwmPins[i]);
+        M5.Lcd.printf("PWM G%d attach NG", gpioOutPins[i]);
       }
     }
     beginAdc();
     delay(10);  /// 最初の平均に十分なサンプルが溜まるのを待つ
 #else
-    pinMode(35, ANALOG);
-    pinMode(36, ANALOG);
+    pinMode(gpioAdcPins[0], ANALOG);
+    pinMode(gpioAdcPins[1], ANALOG);
 #endif
     setGpio(0, _gpioOut[0]);
     setGpio(1, _gpioOut[1]);
@@ -144,7 +168,7 @@ struct PageGPIO : public PageBase
     /// PM1 の IRQ 出力機能を復元する
     for (int i = 0; i < 2; ++i)
     {
-      ledcDetach(gpioPwmPins[i]);
+      ledcDetach(gpioOutPins[i]);
     }
     pinMode(4, INPUT_PULLUP);
     M5.Power.M5pm1.setGPIOMode(m5::M5PM1_Class::gpio1, m5::M5PM1_Class::output);
@@ -227,7 +251,7 @@ private:
     if (index == 0) { drainAdc(); }  /// フレーム先頭 (ch0 参照時) にまとめて取り込む
     return _adcAvg[index];
 #else
-    return analogRead(35 + index);
+    return analogRead(gpioAdcPins[index]);
 #endif
   }
 
@@ -253,9 +277,9 @@ private:
     M5.Lcd.drawRect(x, 179 - (value >> 1), 32, 9, TFT_DARKGRAY);
   //*/
 #if M5TOOLS_TARGET_ESP32C5
-    ledcWrite(gpioPwmPins[index], value >> 1);  // 0-255 → 0-127 (7bit duty)
+    ledcWrite(gpioOutPins[index], value >> 1);  // 0-255 → 0-127 (7bit duty)
 #else
-    dacWrite(index ? 26 : 25, value);
+    dacWrite(gpioOutPins[index], value);
 #endif
   }
 
