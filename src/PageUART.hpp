@@ -3,6 +3,7 @@
 #include "main.hpp"
 
 #include <memory>
+#include <esp_mac.h>
 #include <esp_now.h>
 #include <esp_idf_version.h>
 #if !M5TOOLS_TARGET_ESP32C5
@@ -212,8 +213,14 @@ struct PageUART : public PageBase
   void setup(void) override
   {
     static constexpr char format[] = "%02x%02x%02x%02x%02x%02x";
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
+    /// WiFi.macAddress() は WiFi 未初期化だとバッファへ書かずに失敗する
+    /// (起動直後に開くとスタックのゴミが表示される) ため、efuse 直読の
+    /// esp_read_mac() を使う。BLE/BT が実際に使うのはオフセット付きの
+    /// BT MAC なので、行ごとに対応するアドレスを表示する
+    uint8_t mac_bt[6];
+    uint8_t mac_sta[6];
+    esp_read_mac(mac_bt, ESP_MAC_BT);
+    esp_read_mac(mac_sta, ESP_MAC_WIFI_STA);
     _canvas_source.setPsram(true);
     _canvas_source.createSprite(sourceWidth, sourceHeight * sourceCount);
     _canvas_source.fillSprite(TFT_WHITE);
@@ -224,6 +231,7 @@ struct PageUART : public PageBase
       _canvas_source.pushImage(0, i * sourceHeight, sourceImgWidth, sourceHeight, (m5gfx::swap565_t*)gImage_uartPort + id * sourceImgWidth * sourceHeight);
       if (id == ss_ble || id == ss_bt || id == ss_espnow)
       {
+        auto mac = (id == ss_espnow) ? mac_sta : mac_bt; // ESP-NOW は STA MAC を使う
         _canvas_source.setFont(&fonts::Font0);
         _canvas_source.setTextSize(1,2);
         _canvas_source.setCursor(24, sourceHeight * i + 2);
