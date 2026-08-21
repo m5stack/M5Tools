@@ -243,6 +243,7 @@ Serial.print("done");
 #if M5TOOLS_TARGET_ESP32C5
           /// wakeup ピン (PM1 の IRQ 出力) の解放待ちを含む M5Unified 側の
           /// 手順に任せる (タッチ・電源ボタン・RTC アラームのいずれでも復帰可能)
+          prepareForPowerDown();
           delay(100);
           M5.Lcd.fillScreen(TFT_BLACK);
           M5.Power.deepSleep(m5::Power_Class::sleep_no_timer, true);
