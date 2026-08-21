@@ -122,6 +122,14 @@ static void buzzerFlush(void)
 
 #endif
 
+static void prepareForPowerDown(void)
+{
+#if M5TOOLS_TARGET_ESP32C5
+  buzzerStop();
+  M5.Power.M5pm1.setLedEnLevel(false);
+#endif
+}
+
 void clickSound(void)
 {
 #if M5TOOLS_TARGET_ESP32C5
