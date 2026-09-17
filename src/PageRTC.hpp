@@ -176,6 +176,7 @@ struct PageRTC : public PageBase
     if (_slide_x == 206)
     {
       int timer = _wake_timer.hours * 3600 + _wake_timer.minutes * 60 + _wake_timer.seconds;
+      prepareForPowerDown();
       M5.Power.timerSleep(timer);
     }
     else

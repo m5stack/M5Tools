@@ -87,19 +87,26 @@ struct PageTF : public PageBase
 private:
   bool showFiles(File dir)
   {
-    File fp =  dir.openNextFile();
     bool abort = false;
-    while ((bool)(fp = dir.openNextFile()))
+    while (true)
     {
+      File fp = dir.openNextFile();
+      if (!fp) { break; }
+
       updateTouch();
       abort = (prev_touchPoints < touchPoints);
-      if (abort) break;
+      if (abort)
+      {
+        fp.close();
+        break;
+      }
       M5.Lcd.print(fp.name());
       if (fp.isDirectory())
       {
         M5.Lcd.println("/");
         if (!showFiles(fp))
         {
+          fp.close();
           abort = true;
           break;
         }
@@ -108,6 +115,7 @@ private:
       {
         M5.Lcd.println();
       }
+      fp.close();
     }
     dir.rewindDirectory();
     return !abort;
